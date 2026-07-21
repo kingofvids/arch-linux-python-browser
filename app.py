@@ -3,264 +3,31 @@ from flask_cors import CORS
 import os
 import json
 from datetime import datetime
+import subprocess
+import hashlib
 
 app = Flask(__name__)
 CORS(app)
 
-# Virtual file system
-VIRTUAL_FS = {
-    '/': {
-        'type': 'directory',
-        'contents': {
-            'home': {'type': 'directory', 'contents': {
-                'user': {'type': 'directory', 'contents': {
-                    'Desktop': {'type': 'directory', 'contents': {}},
-                    'Documents': {'type': 'directory', 'contents': {}},
-                    'README.txt': {'type': 'file', 'content': 'Welcome to Arch Linux Terminal!\nThis is a browser-based terminal emulator.'},
-                    'archlinux.txt': {'type': 'file', 'content': 'Arch Linux is a lightweight and flexible Linux distribution.\nIt follows the KISS principle - Keep It Simple, Stupid.'}
-                }}
-            }},
-            'etc': {'type': 'directory', 'contents': {
-                'os-release': {'type': 'file', 'content': 'NAME="Arch Linux"\nID=arch\nID_LIKE=archlinux\nPRETTY_NAME="Arch Linux"\nVERSION="rolling"'}
-            }},
-            'bin': {'type': 'directory', 'contents': {}},
-            'usr': {'type': 'directory', 'contents': {'bin': {'type': 'directory', 'contents': {}}}},
-        }
-    }
-}
-
-# Session state for each user
-sessions = {}
-
-class FileSystem:
-    def __init__(self):
-        self.fs = VIRTUAL_FS
-        self.current_dir = '/'
-    
-    def get_path_parts(self, path):
-        if path.startswith('/'):
-            path = path[1:]
-        return [p for p in path.split('/') if p]
-    
-    def navigate_to_path(self, path):
-        if path == '/':
-            return self.fs['/']
-        
-        parts = self.get_path_parts(path)
-        current = self.fs['/']
-        
-        for part in parts:
-            if part in current.get('contents', {}):
-                current = current['contents'][part]
-            else:
-                return None
-        
-        return current
-    
-    def resolve_path(self, path):
-        if path.startswith('/'):
-            return path
-        
-        if path == '.':
-            return self.current_dir
-        
-        if path == '..':
-            parts = self.get_path_parts(self.current_dir)
-            if parts:
-                return '/' + '/'.join(parts[:-1])
-            return '/'
-        
-        if self.current_dir == '/':
-            return '/' + path
-        else:
-            return self.current_dir + '/' + path
-    
-    def list_directory(self, path):
-        node = self.navigate_to_path(path)
-        if node is None:
-            return None
-        if node.get('type') != 'directory':
-            return None
-        return node.get('contents', {})
-    
-    def read_file(self, path):
-        node = self.navigate_to_path(path)
-        if node is None:
-            return None
-        if node.get('type') != 'file':
-            return None
-        return node.get('content', '')
-    
-    def create_directory(self, path, name):
-        parent = self.navigate_to_path(path)
-        if parent and parent.get('type') == 'directory':
-            if name not in parent.get('contents', {}):
-                parent['contents'][name] = {'type': 'directory', 'contents': {}}
-                return True
-        return False
-    
-    def create_file(self, path, name):
-        parent = self.navigate_to_path(path)
-        if parent and parent.get('type') == 'directory':
-            if name not in parent.get('contents', {}):
-                parent['contents'][name] = {'type': 'file', 'content': ''}
-                return True
-        return False
-    
-    def delete_item(self, path, name):
-        parent = self.navigate_to_path(path)
-        if parent and parent.get('type') == 'directory':
-            if name in parent.get('contents', {}):
-                del parent['contents'][name]
-                return True
-        return False
-
-def execute_command(session_id, command):
-    """Execute a command and return output"""
-    if session_id not in sessions:
-        sessions[session_id] = {
-            'fs': FileSystem(),
-            'history': []
-        }
-    
-    session = sessions[session_id]
-    fs = session['fs']
-    
-    session['history'].append(command)
-    
-    parts = command.strip().split()
-    if not parts:
-        return ''
-    
-    cmd = parts[0]
-    args = parts[1:]
-    
-    # Commands
-    if cmd == 'help':
-        return """Available commands:
-  ls              - List directory contents
-  cd <dir>        - Change directory
-  pwd             - Print working directory
-  cat <file>      - Display file contents
-  echo <text>     - Print text
-  mkdir <dir>     - Create directory
-  touch <file>    - Create file
-  rm <name>       - Remove file/directory
-  uname           - System information
-  whoami          - Current user
-  date            - Current date and time
-  clear           - Clear screen
-  help            - Show this help message
-  exit            - Exit terminal"""
-    
-    elif cmd == 'ls':
-        path = args[0] if args else fs.current_dir
-        path = fs.resolve_path(path)
-        contents = fs.list_directory(path)
-        if contents is None:
-            return f"ls: cannot access '{path}': No such file or directory"
-        
-        if '-la' in ' '.join(args):
-            output = "total 24\n"
-            output += f"drwxr-xr-x 2 user user 4096 Jul 21 10:00 .\n"
-            output += f"drwxr-xr-x 3 user user 4096 Jul 21 10:00 ..\n"
-            for name, item in contents.items():
-                if item['type'] == 'directory':
-                    output += f"drwxr-xr-x 2 user user 4096 Jul 21 10:00 {name}\n"
-                else:
-                    output += f"-rw-r--r-- 1 user user  128 Jul 21 10:00 {name}\n"
-            return output.rstrip()
-        else:
-            return '  '.join(sorted(contents.keys())) if contents else ''
-    
-    elif cmd == 'cd':
-        if not args:
-            fs.current_dir = '/home/user'
-            return ''
-        new_dir = fs.resolve_path(args[0])
-        node = fs.navigate_to_path(new_dir)
-        if node is None:
-            return f"cd: no such file or directory: {args[0]}"
-        if node.get('type') != 'directory':
-            return f"cd: not a directory: {args[0]}"
-        fs.current_dir = new_dir
-        return ''
-    
-    elif cmd == 'pwd':
-        return fs.current_dir
-    
-    elif cmd == 'cat':
-        if not args:
-            return 'cat: missing operand'
-        path = fs.resolve_path(args[0])
-        content = fs.read_file(path)
-        if content is None:
-            return f"cat: {args[0]}: No such file or directory"
-        return content
-    
-    elif cmd == 'echo':
-        return ' '.join(args)
-    
-    elif cmd == 'mkdir':
-        if not args:
-            return 'mkdir: missing operand'
-        if fs.create_directory(fs.current_dir, args[0]):
-            return ''
-        return f"mkdir: cannot create directory '{args[0]}'"
-    
-    elif cmd == 'touch':
-        if not args:
-            return 'touch: missing operand'
-        if fs.create_file(fs.current_dir, args[0]):
-            return ''
-        return f"touch: cannot create file '{args[0]}'"
-    
-    elif cmd == 'rm':
-        if not args:
-            return 'rm: missing operand'
-        if fs.delete_item(fs.current_dir, args[0]):
-            return ''
-        return f"rm: cannot remove '{args[0]}': No such file or directory"
-    
-    elif cmd == 'uname':
-        if '-a' in args:
-            return 'Linux arch-linux 5.18.0-arch1-1 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux'
-        return 'Linux'
-    
-    elif cmd == 'whoami':
-        return 'user'
-    
-    elif cmd == 'date':
-        return datetime.now().strftime('%a %b %d %H:%M:%S %Z %Y')
-    
-    elif cmd == 'clear':
-        return '__CLEAR__'
-    
-    elif cmd == 'exit':
-        return '__EXIT__'
-    
-    else:
-        return f"{cmd}: command not found"
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/api/execute', methods=['POST'])
-def api_execute():
-    data = request.json
-    session_id = data.get('session_id', 'default')
-    command = data.get('command', '')
-    
-    output = execute_command(session_id, command)
-    
-    session = sessions.get(session_id, {})
-    fs = session.get('fs', FileSystem())
-    
-    return jsonify({
-        'output': output,
-        'cwd': fs.current_dir
-    })
-
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+# Linux Kernel sample files structure
+KERNEL_FILES = {
+    'linux': {
+        'arch': {
+            'x86': {
+                'boot': {
+                    'head.S': 'ENTRY(startup_32)\n\tcli\n\tcld\n\t.byte 0xea\n\t.long startup_32\n\t.word __BOOT_CS\nENDPROC(startup_32)',
+                    'compressed': {
+                        'head_64.S': '; x86_64 kernel header\n; Entry point for 64-bit kernel\n.section .head.text\n.globl startup_64'
+                    }
+                },
+                'kernel': {
+                    'process.c': '''/*\n * process.c - Process management\n * Linux kernel process scheduler\n */\n\n#include <linux/sched.h>\n#include <linux/module.h>\n\nstatic void __schedule(void)\n{\n    struct task_struct *curr, *next;\n    unsigned long *switch_count;\n    struct mm_struct *mm;\n    struct mm_struct *oldmm;\n\n    curr = current;\n    if (unlikely(!rq->nr_running))\n        idle_balance(cpu, rq);\n}\n\nEXPORT_SYMBOL(__schedule);''',
+                    'fork.c': '''/*\n * fork.c - Process fork implementation\n */\n\n#include <linux/slab.h>\n#include <linux/sched.h>\n#include <linux/syscalls.h>\n\nlong do_fork(unsigned long clone_flags,\n      unsigned long stack_start,\n      unsigned long stack_size,\n      int __user *parent_tidptr,\n      int __user *child_tidptr)\n{\n    struct task_struct *p;\n    int trace = 0;\n    long nr;\n\n    /* Allocate task structure */\n    p = copy_process(clone_flags, stack_start, stack_size,\n         child_tidptr, NULL, trace);\n\n    return nr;\n}\n\nEXPORT_SYMBOL(do_fork);''',
+                    'sched.c': '''/*\n * sched.c - Process scheduler\n * Completely Fair Scheduler (CFS)\n */\n\n#include <linux/sched.h>\n#include <linux/rbtree.h>\n\nstatic void update_curr(struct cfs_rq *cfs_rq)\n{\n    struct sched_entity *curr = cfs_rq->curr;\n    u64 now = rq_of(cfs_rq)->clock_task;\n    unsigned long delta_exec;\n\n    if (unlikely(!curr))\n        return;\n\n    delta_exec = (unsigned long)(now - curr->exec_start);\n    if (!delta_exec)\n        return;\n\n    curr->sum_exec_runtime += delta_exec;\n    curr->exec_start = now;\n}\n\nEXPORT_SYMBOL(update_curr);''',
+                    'irq.c': '''/*\n * irq.c - Interrupt handling\n */\n\n#include <linux/irq.h>\n#include <linux/spinlock.h>\n\nirqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)\n{\n    irqreturn_t ret, retval = IRQ_NONE;\n    unsigned int status = 0;\n\n    if (!(action->flags & IRQF_DISABLED))\n        local_irq_enable();\n\n    do {\n        ret = action->handler(irq, action->dev_id);\n        if (ret == IRQ_HANDLED)\n            status |= action->flags;\n        retval |= ret;\n        action = action->next;\n    } while (action);\n\n    if (status & IRQF_SAMPLE_RANDOM)\n        add_interrupt_randomness(irq);\n\n    return retval;\n}\n\nEXPORT_SYMBOL(handle_IRQ_event);'''\n                }\n            },
+            'arm': {\n                'boot': {\n                    'head.S': '; ARM kernel entry point\n.section .text.head\n.globl stext\nstext:\n    setmode PSR_F_BIT | PSR_I_BIT | SVC_MODE',
+                }\n            }\n        },
+        'drivers': {\n            'gpu': {\n                'drm': {\n                    'i915': {\n                        'i915_drv.c': '''/*\n * Intel i915 DRM driver\n */\n\n#include <drm/drmP.h>\n#include "i915_drv.h"\n\nstatic int i915_load_modeset_init(struct drm_device *dev)\n{\n    struct drm_i915_private *dev_priv = dev->dev_private;\n    int ret;\n\n    ret = intel_parse_bios(dev);\n    if (ret)\n        DRM_INFO("Failed to parse BIOS\\\\n");\n\n    intel_modeset_init(dev);\n    intel_modeset_gem_init(dev);\n\n    return 0;\n}\n\nEXPORT_SYMBOL(i915_load_modeset_init);''',
+                        'i915_gem.c': '''/*\n * Graphics Execution Manager (GEM)\n */\n\n#include "i915_drv.h"\n\nint i915_gem_create_ioctl(struct drm_device *dev, void *data,\n          struct drm_file *file_priv)\n{\n    struct drm_i915_gem_create *args = data;\n    struct drm_i915_gem_object *obj;\n\n    obj = i915_gem_alloc_object(dev, args->size);\n    if (obj == NULL)\n        return -ENOMEM;\n\n    return 0;\n}'''\n                    }\n                }\n            },\n            'net': {\n                'core': {\n                    'dev.c': '''/*\n * Network device implementation\n */\n\n#include <linux/netdevice.h>\n#include <linux/etherdevice.h>\n\nint register_netdev(struct net_device *dev)\n{\n    int ret;\n\n    rtnl_lock();\n    ret = register_netdevice(dev);\n    rtnl_unlock();\n\n    return ret;\n}\n\nEXPORT_SYMBOL(register_netdev);''',
+                    'skbuff.c': '''/*\n * Socket buffer management\n */\n\n#include <linux/skbuff.h>\n#include <linux/slab.h>\n\nstruct sk_buff *skb_clone(struct sk_buff *skb, gfp_t gfp_mask)\n{\n    struct sk_buff *n;\n\n    n = skb + 1;\n    if (skb->fclone == SKB_FCLONE_ORIG &&\n        n->fclone == SKB_FCLONE_UNAVAILABLE) {\n        atomic_t *fclone_ref = (atomic_t *) (n + 1);\n        n->fclone = SKB_FCLONE_CLONE;\n        atomic_add(1, fclone_ref);\n    } else {\n        n = __skb_clone(skb, gfp_mask);\n    }\n\n    return n;\n}\n\nEXPORT_SYMBOL(skb_clone);'''\n                },\n                'ipv4': {\n                    'ip_input.c': '''/*\n * IPv4 input processing\n */\n\n#include <linux/netfilter.h>\n#include <net/ip.h>\n\nint ip_rcv(struct sk_buff *skb, struct net_device *dev,\n    struct packet_type *pt, struct net_device *orig_dev)\n{\n    const struct iphdr *iph;\n    struct net *net;\n    u32 len;\n\n    net = dev_net(dev);\n    if (!pskb_may_pull(skb, sizeof(struct iphdr)))\n        goto inhdr_error;\n\n    iph = ip_hdr(skb);\n\n    return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING, skb, dev, NULL,\n            ip_rcv_finish);\n}'''\n                }\n            }\n        },\n        'fs': {\n            'ext4': {\n                'balloc.c': '''/*\n * ext4 Block allocation routines\n */\n\n#include "ext4.h"\n#include "mballoc.h"\n\nstatic ext4_grpblk_t\nmb_find_next_zero_bit(void *buddy, ext4_grpblk_t max, ext4_grpblk_t offset)\n{\n    int bit = find_next_zero_bit(buddy, max << 1, offset << 1);\n    return bit >> 1;\n}\n\nstatic void mb_set_largest_free_order(struct super_block *sb,\n                struct ext4_group_info *grp)\n{\n    int i = ARRAY_SIZE(grp->bb_largest_free_order) - 1;\n\n    do {\n        if (grp->bb_free_count >= (1 << (i + 1)))\n            break;\n    } while (--i >= 0);\n\n    grp->bb_largest_free_order = i;\n}''',
+                'inode.c': '''/*\n * ext4 inode routines\n */\n\n#include "ext4.h"\n\nstruct inode *ext4_iget(struct super_block *sb, unsigned long ino)\n{\n    struct ext4_iloc iloc;\n    struct ext4_inode *raw_inode;\n    struct inode *inode;\n    long ret;\n\n    inode = iget_locked(sb, ino);\n    if (!inode)\n        return ERR_PTR(-ENOMEM);\n\n    if (!(inode->i_state & I_NEW))\n        return inode;\n\n    ret = ext4_get_inode_loc(inode, &iloc);\n    if (ret < 0)\n        goto bad_inode;\n\n    return inode;\n}\n\nEXPORT_SYMBOL(ext4_iget);'''\n            },\n            'btrfs': {\n                'ctree.c': '''/*\n * B-tree implementation for btrfs\n */\n\n#include "ctree.h"\n\nstatic int bin_search(const struct btrfs_key *key, const void *p,\n           int hi, int *slot)\n{\n    int lo = 0;\n    int mid;\n    int ret;\n\n    while (lo < hi) {\n        mid = (lo + hi) / 2;\n        ret = comp_keys(key, offset_ptr(p, mid));\n\n        if (ret < 0)\n            hi = mid;\n        else if (ret > 0)\n            lo = mid + 1;\n        else {\n            *slot = mid;\n            return 0;\n        }\n    }\n    *slot = lo;\n    return 1;\n}\n\nEXPORT_SYMBOL(bin_search);'''\n            }\n        },\n        'mm': {\n            'page_alloc.c': '''/*\n * Memory allocator implementation\n */\n\n#include <linux/mm.h>\n#include <linux/gfp.h>\n\nstatic inline void __free_one_page(struct page *page, unsigned long pfn,\n        struct zone *zone, unsigned int order,\n        int migratetype)\n{\n    unsigned long combined_pfn;\n    unsigned long uninitialized_var(buddy_pfn);\n    struct page *buddy;\n\n    while (order < MAX_ORDER - 1) {\n        buddy_pfn = __find_buddy_pfn(pfn, order);\n        buddy = page + (buddy_pfn - pfn);\n\n        if (!page_is_buddy(page, buddy, order))\n            goto done_merging;\n\n        if (page_before_buddy(page, buddy, order)) {\n            combined_pfn = pfn;\n            pfn = buddy_pfn;\n        } else {\n            combined_pfn = buddy_pfn;\n        }\n        pfn = combined_pfn;\n        page = page + (combined_pfn - pfn);\n        order++;\n    }\n}\n\nEXPORT_SYMBOL(__free_one_page);''',\n            'vmscan.c': '''/*\n * Page reclaim and swap management\n */\n\n#include <linux/mm.h>\n#include <linux/swap.h>\n\nstatic unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,\n    struct lruvec *lruvec, struct scan_control *sc)\n{\n    int file = is_file_lru(lru);\n\n    if (lru == LRU_UNEVICTABLE)\n        return shrink_unevictable_list(lruvec, sc);\n\n    if (nr_to_scan == 0)\n        return 0;\n\n    return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);\n}\n\nEXPORT_SYMBOL(shrink_list);'''\n        },\n        'include': {\n            'linux': {\n                'sched.h': '''/*\n * sched.h - Process scheduler header\n */\n\n#ifndef _LINUX_SCHED_H\n#define _LINUX_SCHED_H\n\nstruct task_struct {\n    volatile long state;\n    void *stack;\n    atomic_t usage;\n    unsigned int flags;\n    unsigned int ptrace;\n    \n    int prio, static_prio, normal_prio;\n    unsigned int rt_priority;\n    const struct sched_class *sched_class;\n    struct sched_entity se;\n    struct sched_rt_entity rt;\n    \n    unsigned int policy;\n    cpumask_t cpus_allowed;\n    \n    int nr_cpus_allowed;\n    unsigned long rcu_blocked_node;\n    \n    struct sched_info sched_info;\n    struct list_head tasks;\n};\n\n#endif /* _LINUX_SCHED_H */''',\n                'kernel.h': '''/*\n * kernel.h - Kernel interfaces\n */\n\n#ifndef _LINUX_KERNEL_H\n#define _LINUX_KERNEL_H\n\n#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))\n\n#define LINUX_VERSION_CODE KERNEL_VERSION(5,18,0)\n\n#define KERNEL_VERSION_STR "5.18.0"\n\n#endif /* _LINUX_KERNEL_H */''',\n                'mm.h': '''/*\n * mm.h - Memory management header\n */\n\n#ifndef _LINUX_MM_H\n#define _LINUX_MM_H\n\nstruct page {\n    unsigned long flags;\n    atomic_t _refcount;\n    atomic_t _mapcount;\n    unsigned long private;\n    struct address_space *mapping;\n    pgoff_t index;\n    unsigned long counters;\n    union {\n        struct {\n            unsigned int inuse:16;\n            unsigned int objects:15;\n            unsigned int frozen:1;\n        };\n        unsigned long counters;\n    };\n};\n\n#endif /* _LINUX_MM_H */'''\n            }\n        },\n        'Makefile': '''# Makefile - Linux kernel build system\n# Architecture\nARCH = x86_64\nCROSS_COMPILE =\n\n# Kernel version\nVERSION = 5\nPATCHLEVEL = 18\nSUBLEVEL = 0\nEXTRAVERSION = -arch1-1\n\n# Compiler\nCC = gcc\nCPP = $(CC) -E\nAR = ar\nLD = ld\nOBJCOPY = objcopy\nOBJDUMP = objdump\n\n# Kernel image\nVMBOOT = arch/$(ARCH)/boot/vmlinux\nBZIMAGE = arch/$(ARCH)/boot/bzImage\n\nall: vmlinux\n\nconfig: prepare\n\tvmlinux: $(VMLINUX_OBJS)\n\t$(LD) $(LDFLAGS) -o vmlinux $^\n\nclean:\n\t$(RM) -f *.o vmlinux\n\n.PHONY: all config clean\n''',\n        'README': '''Linux Kernel 5.18.0\n===================\n\nThe Linux kernel is a free and open-source, monolithic, Unix-like operating \nsystem kernel. It is deployed on a wide variety of computing systems, from \nembedded devices and mobile phones to mainframes and supercomputers.\n\nKey Features:\n- Monolithic kernel design\n- Completely Fair Scheduler (CFS)\n- Memory management with page caching\n- Virtual memory system\n- Loadable kernel modules\n- Device drivers for hardware support\n- Filesystem support (ext4, btrfs, XFS, etc.)\n- Networking stack (TCP/IP, IPv4/IPv6)\n- Security frameworks (SELinux, AppArmor)\n\nDirectory Structure:\n\narch/        - Architecture-specific code (x86, ARM, PowerPC, etc.)\ndrivers/     - Device drivers (GPU, network, storage, etc.)\nfs/          - Filesystem implementations\nmm/          - Memory management\ninclude/     - Header files\nKernel/      - Core kernel functionality\nnet/         - Networking stack\n\nFor more information, visit: https://kernel.org\n'''\n    }\n}\n\n# Virtual file system\nVIRTUAL_FS = {\n    '/': {\n        'type': 'directory',\n        'contents': {\n            'home': {'type': 'directory', 'contents': {\n                'user': {'type': 'directory', 'contents': {\n                    'Desktop': {'type': 'directory', 'contents': {}},\n                    'Documents': {'type': 'directory', 'contents': {}},\n                    'README.txt': {'type': 'file', 'content': 'Welcome to Arch Linux Terminal!\\nThis is a browser-based terminal emulator with Linux Kernel source integration.'},\n                    'archlinux.txt': {'type': 'file', 'content': 'Arch Linux is a lightweight and flexible Linux distribution.\\nIt follows the KISS principle - Keep It Simple, Stupid.'}\n                }}\n            }},\n            'etc': {'type': 'directory', 'contents': {\n                'os-release': {'type': 'file', 'content': 'NAME=\"Arch Linux\"\\nID=arch\\nID_LIKE=archlinux\\nPRETTY_NAME=\"Arch Linux\"\\nVERSION=\"rolling\"'}\n            }},\n            'usr': {'type': 'directory', 'contents': {'bin': {'type': 'directory', 'contents': {}}}},\n            'src': {'type': 'directory', 'contents': KERNEL_FILES},\n            'bin': {'type': 'directory', 'contents': {}},\n        }\n    }\n}\n\n# Session state for each user\nsessions = {}\n\nclass FileSystem:\n    def __init__(self):\n        self.fs = VIRTUAL_FS\n        self.current_dir = '/home/user'\n    \n    def get_path_parts(self, path):\n        if path.startswith('/'):\n            path = path[1:]\n        return [p for p in path.split('/') if p]\n    \n    def navigate_to_path(self, path):\n        if path == '/':\n            return self.fs['/']\n        \n        parts = self.get_path_parts(path)\n        current = self.fs['/']\n        \n        for part in parts:\n            if part in current.get('contents', {}):\n                current = current['contents'][part]\n            else:\n                return None\n        \n        return current\n    \n    def resolve_path(self, path):\n        if path.startswith('/'):\n            return path\n        \n        if path == '.':\n            return self.current_dir\n        \n        if path == '..':\n            parts = self.get_path_parts(self.current_dir)\n            if parts:\n                return '/' + '/'.join(parts[:-1])\n            return '/'\n        \n        if self.current_dir == '/':\n            return '/' + path\n        else:\n            return self.current_dir + '/' + path\n    \n    def list_directory(self, path):\n        node = self.navigate_to_path(path)\n        if node is None:\n            return None\n        if node.get('type') != 'directory':\n            return None\n        return node.get('contents', {})\n    \n    def read_file(self, path):\n        node = self.navigate_to_path(path)\n        if node is None:\n            return None\n        if node.get('type') != 'file':\n            return None\n        return node.get('content', '')\n    \n    def create_directory(self, path, name):\n        parent = self.navigate_to_path(path)\n        if parent and parent.get('type') == 'directory':\n            if name not in parent.get('contents', {}):\n                parent['contents'][name] = {'type': 'directory', 'contents': {}}\n                return True\n        return False\n    \n    def create_file(self, path, name):\n        parent = self.navigate_to_path(path)\n        if parent and parent.get('type') == 'directory':\n            if name not in parent.get('contents', {}):\n                parent['contents'][name] = {'type': 'file', 'content': ''}\n                return True\n        return False\n    \n    def delete_item(self, path, name):\n        parent = self.navigate_to_path(path)\n        if parent and parent.get('type') == 'directory':\n            if name in parent.get('contents', {}):\n                del parent['contents'][name]\n                return True\n        return False\n\ndef execute_command(session_id, command):\n    \"\"\"Execute a command and return output\"\"\"\n    if session_id not in sessions:\n        sessions[session_id] = {\n            'fs': FileSystem(),\n            'history': []\n        }\n    \n    session = sessions[session_id]\n    fs = session['fs']\n    \n    session['history'].append(command)\n    \n    parts = command.strip().split()\n    if not parts:\n        return ''\n    \n    cmd = parts[0]\n    args = parts[1:]\n    \n    # Commands\n    if cmd == 'help':\n        return \"\"\"Available commands:\n  ls              - List directory contents\n  cd <dir>        - Change directory\n  pwd             - Print working directory\n  cat <file>      - Display file contents\n  echo <text>     - Print text\n  mkdir <dir>     - Create directory\n  touch <file>    - Create file\n  rm <name>       - Remove file/directory\n  find <pattern>  - Find files matching pattern\n  grep <text>     - Search in files\n  wc <file>       - Word/line count\n  head <file>     - Show first 10 lines\n  tail <file>     - Show last 10 lines\n  tree            - Show directory tree\n  uname           - System information\n  whoami          - Current user\n  date            - Current date and time\n  clear           - Clear screen\n  help            - Show this help message\n  exit            - Exit terminal\n\nLinux Kernel Integration:\n  Try: cd /src/linux to explore kernel source!\n  Browse: drivers/, fs/, mm/, arch/, include/\n  Read: cat /src/linux/README\"\"\"\n    \n    elif cmd == 'ls':\n        path = args[0] if args else fs.current_dir\n        path = fs.resolve_path(path)\n        contents = fs.list_directory(path)\n        if contents is None:\n            return f\"ls: cannot access '{path}': No such file or directory\"\n        \n        if '-la' in ' '.join(args):\n            output = \"total 24\\n\"\n            output += f\"drwxr-xr-x 2 user user 4096 Jul 21 10:00 .\\n\"\n            output += f\"drwxr-xr-x 3 user user 4096 Jul 21 10:00 ..\\n\"\n            for name, item in contents.items():\n                if item['type'] == 'directory':\n                    output += f\"drwxr-xr-x 2 user user 4096 Jul 21 10:00 {name}\\n\"\n                else:\n                    content = item.get('content', '')\n                    size = len(content.encode('utf-8'))\n                    output += f\"-rw-r--r-- 1 user user {size:>5} Jul 21 10:00 {name}\\n\"\n            return output.rstrip()\n        else:\n            return '  '.join(sorted(contents.keys())) if contents else ''\n    \n    elif cmd == 'cd':\n        if not args:\n            fs.current_dir = '/home/user'\n            return ''\n        new_dir = fs.resolve_path(args[0])\n        node = fs.navigate_to_path(new_dir)\n        if node is None:\n            return f\"cd: no such file or directory: {args[0]}\"\n        if node.get('type') != 'directory':\n            return f\"cd: not a directory: {args[0]}\"\n        fs.current_dir = new_dir\n        return ''\n    \n    elif cmd == 'pwd':\n        return fs.current_dir\n    \n    elif cmd == 'cat':\n        if not args:\n            return 'cat: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"cat: {args[0]}: No such file or directory\"\n        return content\n    \n    elif cmd == 'echo':\n        return ' '.join(args)\n    \n    elif cmd == 'mkdir':\n        if not args:\n            return 'mkdir: missing operand'\n        if fs.create_directory(fs.current_dir, args[0]):\n            return ''\n        return f\"mkdir: cannot create directory '{args[0]}'\"\n    \n    elif cmd == 'touch':\n        if not args:\n            return 'touch: missing operand'\n        if fs.create_file(fs.current_dir, args[0]):\n            return ''\n        return f\"touch: cannot create file '{args[0]}'\"\n    \n    elif cmd == 'rm':\n        if not args:\n            return 'rm: missing operand'\n        if fs.delete_item(fs.current_dir, args[0]):\n            return ''\n        return f\"rm: cannot remove '{args[0]}': No such file or directory\"\n    \n    elif cmd == 'find':\n        if not args:\n            return 'find: missing pattern'\n        pattern = args[0].lower()\n        results = []\n        \n        def search_dir(path, node):\n            if node.get('type') == 'directory':\n                for name, item in node.get('contents', {}).items():\n                    full_path = path + '/' + name if path else '/' + name\n                    if pattern in name.lower():\n                        results.append(full_path)\n                    search_dir(full_path, item)\n        \n        search_dir('', fs.navigate_to_path(fs.current_dir))\n        return '\\n'.join(results) if results else f'find: no matches for {pattern}'\n    \n    elif cmd == 'grep':\n        if len(args) < 2:\n            return 'grep: missing arguments'\n        pattern = args[0]\n        filepath = fs.resolve_path(args[1])\n        content = fs.read_file(filepath)\n        if content is None:\n            return f\"grep: {args[1]}: No such file or directory\"\n        \n        matches = []\n        for i, line in enumerate(content.split('\\n'), 1):\n            if pattern in line:\n                matches.append(f\"{i}: {line}\")\n        return '\\n'.join(matches) if matches else ''\n    \n    elif cmd == 'head':\n        if not args:\n            return 'head: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"head: {args[0]}: No such file or directory\"\n        lines = content.split('\\n')[:10]\n        return '\\n'.join(lines)\n    \n    elif cmd == 'tail':\n        if not args:\n            return 'tail: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"tail: {args[0]}: No such file or directory\"\n        lines = content.split('\\n')[-10:]\n        return '\\n'.join(lines)\n    \n    elif cmd == 'wc':\n        if not args:\n            return 'wc: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"wc: {args[0]}: No such file or directory\"\n        lines = len(content.split('\\n'))\n        words = len(content.split())\n        chars = len(content)\n        return f\" {lines} {words} {chars} {args[0]}\"\n    \n    elif cmd == 'tree':\n        def build_tree(node, prefix='', is_last=True, depth=0, max_depth=3):\n            if depth > max_depth:\n                return ''\n            \n            output = ''\n            if depth == 0:\n                output = fs.current_dir + '\\n'\n            \n            if node.get('type') == 'directory':\n                items = sorted(node.get('contents', {}).items())\n                for i, (name, item) in enumerate(items):\n                    is_last_item = i == len(items) - 1\n                    current_prefix = '└── ' if is_last_item else '├── '\n                    output += prefix + current_prefix + name\n                    \n                    if item['type'] == 'directory':\n                        output += '/'\n                        next_prefix = prefix + ('    ' if is_last_item else '│   ')\n                        output += '\\n' + build_tree(item, next_prefix, is_last_item, depth + 1, max_depth)\n                    else:\n                        output += '\\n'\n            \n            return output\n        \n        node = fs.navigate_to_path(fs.current_dir)\n        return build_tree(node).rstrip()\n    \n    elif cmd == 'uname':\n        if '-a' in args:\n            return 'Linux arch-linux 5.18.0-arch1-1 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux'\n        return 'Linux'\n    \n    elif cmd == 'whoami':\n        return 'user'\n    \n    elif cmd == 'date':\n        return datetime.now().strftime('%a %b %d %H:%M:%S %Z %Y')\n    \n    elif cmd == 'clear':\n        return '__CLEAR__'\n    \n    elif cmd == 'exit':\n        return '__EXIT__'\n    \n    else:\n        return f\"{cmd}: command not found\"\n\n@app.route('/')\ndef index():\n    return render_template('index.html')\n\n@app.route('/api/execute', methods=['POST'])\ndef api_execute():\n    data = request.json\n    session_id = data.get('session_id', 'default')\n    command = data.get('command', '')\n    \n    output = execute_command(session_id, command)\n    \n    session = sessions.get(session_id, {})\n    fs = session.get('fs', FileSystem())\n    \n    return jsonify({\n        'output': output,\n        'cwd': fs.current_dir\n    })\n\nif __name__ == '__main__':\n    app.run(debug=True, host='0.0.0.0', port=5000)

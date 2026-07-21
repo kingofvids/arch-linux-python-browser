@@ -31,6 +31,9 @@ PACKAGE_DB = {
         'openssh': {'version': '9.1p1-1', 'size': '984 KB', 'deps': []},
         'python': {'version': '3.11.1-1', 'size': '58.4 MB', 'deps': []},
         'python-pip': {'version': '22.3.1-1', 'size': '2.1 MB', 'deps': ['python']},
+        'gnome': {'version': '43.0-1', 'size': '1.2 GB', 'deps': []},
+        'gnome-shell': {'version': '43.3-1', 'size': '8.5 MB', 'deps': ['gnome']},
+        'flatpak': {'version': '1.14.1-1', 'size': '8.2 MB', 'deps': []},
     },
     'extra': {
         'nodejs': {'version': '19.4.0-1', 'size': '42.1 MB', 'deps': []},
@@ -40,25 +43,694 @@ PACKAGE_DB = {
         'mongodb': {'version': '5.0.14-1', 'size': '312.7 MB', 'deps': []},
         'nginx': {'version': '1.23.3-1', 'size': '1.8 MB', 'deps': []},
         'apache': {'version': '2.4.54-1', 'size': '5.7 MB', 'deps': []},
+    },
+    'flathub': {
+        'org.gnome.Nautilus': {'version': '43.1', 'size': '8.3 MB', 'deps': []},
+        'org.gnome.TextEditor': {'version': '43.0', 'size': '2.1 MB', 'deps': []},
+        'org.firefox.firefox': {'version': '109.0', 'size': '157.8 MB', 'deps': []},
+        'org.telegram.desktop': {'version': '4.5.3', 'size': '98.2 MB', 'deps': []},
+        'com.spotify.Client': {'version': '1.1.97', 'size': '312.5 MB', 'deps': []},
+        'org.blender.Blender': {'version': '3.4.1', 'size': '256.3 MB', 'deps': []},
+        'com.github.tchx84.Flatseal': {'version': '2.0.4', 'size': '1.2 MB', 'deps': []},
+        'org.videolan.VLC': {'version': '3.0.18', 'size': '78.5 MB', 'deps': []},
     }
 }
 
-# Linux Kernel sample files structure
+# Desktop Environment Data
+DESKTOP_APPS = {
+    'nautilus': {'name': 'Files', 'icon': '📁', 'cmd': 'nautilus'},
+    'gnome-terminal': {'name': 'Terminal', 'icon': '⌨️', 'cmd': 'gnome-terminal'},
+    'gedit': {'name': 'Text Editor', 'icon': '📝', 'cmd': 'gedit'},
+    'firefox': {'name': 'Firefox', 'icon': '🌐', 'cmd': 'firefox'},
+    'settings': {'name': 'Settings', 'icon': '⚙️', 'cmd': 'gnome-control-center'},
+    'calculator': {'name': 'Calculator', 'icon': '🧮', 'cmd': 'gnome-calculator'},
+    'music': {'name': 'Music Player', 'icon': '🎵', 'cmd': 'rhythmbox'},
+}
+
+# Linux Kernel sample files structure (kept for brevity)
 KERNEL_FILES = {
     'linux': {
-        'arch': {
-            'x86': {
-                'boot': {
-                    'head.S': 'ENTRY(startup_32)\n\tcli\n\tcld\n\t.byte 0xea\n\t.long startup_32\n\t.word __BOOT_CS\nENDPROC(startup_32)',
-                    'compressed': {
-                        'head_64.S': '; x86_64 kernel header\n; Entry point for 64-bit kernel\n.section .head.text\n.globl startup_64'
-                    }
-                },
-                'kernel': {
-                    'process.c': '''/*\n * process.c - Process management\n * Linux kernel process scheduler\n */\n\n#include <linux/sched.h>\n#include <linux/module.h>\n\nstatic void __schedule(void)\n{\n    struct task_struct *curr, *next;\n    unsigned long *switch_count;\n    struct mm_struct *mm;\n    struct mm_struct *oldmm;\n\n    curr = current;\n    if (unlikely(!rq->nr_running))\n        idle_balance(cpu, rq);\n}\n\nEXPORT_SYMBOL(__schedule);''',
-                    'fork.c': '''/*\n * fork.c - Process fork implementation\n */\n\n#include <linux/slab.h>\n#include <linux/sched.h>\n#include <linux/syscalls.h>\n\nlong do_fork(unsigned long clone_flags,\n      unsigned long stack_start,\n      unsigned long stack_size,\n      int __user *parent_tidptr,\n      int __user *child_tidptr)\n{\n    struct task_struct *p;\n    int trace = 0;\n    long nr;\n\n    /* Allocate task structure */\n    p = copy_process(clone_flags, stack_start, stack_size,\n         child_tidptr, NULL, trace);\n\n    return nr;\n}\n\nEXPORT_SYMBOL(do_fork);''',
-                    'sched.c': '''/*\n * sched.c - Process scheduler\n * Completely Fair Scheduler (CFS)\n */\n\n#include <linux/sched.h>\n#include <linux/rbtree.h>\n\nstatic void update_curr(struct cfs_rq *cfs_rq)\n{\n    struct sched_entity *curr = cfs_rq->curr;\n    u64 now = rq_of(cfs_rq)->clock_task;\n    unsigned long delta_exec;\n\n    if (unlikely(!curr))\n        return;\n\n    delta_exec = (unsigned long)(now - curr->exec_start);\n    if (!delta_exec)\n        return;\n\n    curr->sum_exec_runtime += delta_exec;\n    curr->exec_start = now;\n}\n\nEXPORT_SYMBOL(update_curr);''',
-                    'irq.c': '''/*\n * irq.c - Interrupt handling\n */\n\n#include <linux/irq.h>\n#include <linux/spinlock.h>\n\nirqreturn_t handle_IRQ_event(unsigned int irq, struct irqaction *action)\n{\n    irqreturn_t ret, retval = IRQ_NONE;\n    unsigned int status = 0;\n\n    if (!(action->flags & IRQF_DISABLED))\n        local_irq_enable();\n\n    do {\n        ret = action->handler(irq, action->dev_id);\n        if (ret == IRQ_HANDLED)\n            status |= action->flags;\n        retval |= ret;\n        action = action->next;\n    } while (action);\n\n    if (status & IRQF_SAMPLE_RANDOM)\n        add_interrupt_randomness(irq);\n\n    return retval;\n}\n\nEXPORT_SYMBOL(handle_IRQ_event);'''\n                }\n            },
-            'arm': {\n                'boot': {\n                    'head.S': '; ARM kernel entry point\n.section .text.head\n.globl stext\nstext:\n    setmode PSR_F_BIT | PSR_I_BIT | SVC_MODE',\n                }\n            }\n        },
-        'drivers': {\n            'gpu': {\n                'drm': {\n                    'i915': {\n                        'i915_drv.c': '''/*\n * Intel i915 DRM driver\n */\n\n#include <drm/drmP.h>\n#include "i915_drv.h"\n\nstatic int i915_load_modeset_init(struct drm_device *dev)\n{\n    struct drm_i915_private *dev_priv = dev->dev_private;\n    int ret;\n\n    ret = intel_parse_bios(dev);\n    if (ret)\n        DRM_INFO("Failed to parse BIOS\\\\n");\n\n    intel_modeset_init(dev);\n    intel_modeset_gem_init(dev);\n\n    return 0;\n}\n\nEXPORT_SYMBOL(i915_load_modeset_init);''',
-                        'i915_gem.c': '''/*\n * Graphics Execution Manager (GEM)\n */\n\n#include "i915_drv.h"\n\nint i915_gem_create_ioctl(struct drm_device *dev, void *data,\n          struct drm_file *file_priv)\n{\n    struct drm_i915_gem_create *args = data;\n    struct drm_i915_gem_object *obj;\n\n    obj = i915_gem_alloc_object(dev, args->size);\n    if (obj == NULL)\n        return -ENOMEM;\n\n    return 0;\n}'''\n                    }\n                }\n            },\n            'net': {\n                'core': {\n                    'dev.c': '''/*\n * Network device implementation\n */\n\n#include <linux/netdevice.h>\n#include <linux/etherdevice.h>\n\nint register_netdev(struct net_device *dev)\n{\n    int ret;\n\n    rtnl_lock();\n    ret = register_netdevice(dev);\n    rtnl_unlock();\n\n    return ret;\n}\n\nEXPORT_SYMBOL(register_netdev);''',\n                    'skbuff.c': '''/*\n * Socket buffer management\n */\n\n#include <linux/skbuff.h>\n#include <linux/slab.h>\n\nstruct sk_buff *skb_clone(struct sk_buff *skb, gfp_t gfp_mask)\n{\n    struct sk_buff *n;\n\n    n = skb + 1;\n    if (skb->fclone == SKB_FCLONE_ORIG &&\n        n->fclone == SKB_FCLONE_UNAVAILABLE) {\n        atomic_t *fclone_ref = (atomic_t *) (n + 1);\n        n->fclone = SKB_FCLONE_CLONE;\n        atomic_add(1, fclone_ref);\n    } else {\n        n = __skb_clone(skb, gfp_mask);\n    }\n\n    return n;\n}\n\nEXPORT_SYMBOL(skb_clone);'''\n                },\n                'ipv4': {\n                    'ip_input.c': '''/*\n * IPv4 input processing\n */\n\n#include <linux/netfilter.h>\n#include <net/ip.h>\n\nint ip_rcv(struct sk_buff *skb, struct net_device *dev,\n    struct packet_type *pt, struct net_device *orig_dev)\n{\n    const struct iphdr *iph;\n    struct net *net;\n    u32 len;\n\n    net = dev_net(dev);\n    if (!pskb_may_pull(skb, sizeof(struct iphdr)))\n        goto inhdr_error;\n\n    iph = ip_hdr(skb);\n\n    return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING, skb, dev, NULL,\n            ip_rcv_finish);\n}'''\n                }\n            }\n        },\n        'fs': {\n            'ext4': {\n                'balloc.c': '''/*\n * ext4 Block allocation routines\n */\n\n#include "ext4.h"\n#include "mballoc.h"\n\nstatic ext4_grpblk_t\nmb_find_next_zero_bit(void *buddy, ext4_grpblk_t max, ext4_grpblk_t offset)\n{\n    int bit = find_next_zero_bit(buddy, max << 1, offset << 1);\n    return bit >> 1;\n}\n\nstatic void mb_set_largest_free_order(struct super_block *sb,\n                struct ext4_group_info *grp)\n{\n    int i = ARRAY_SIZE(grp->bb_largest_free_order) - 1;\n\n    do {\n        if (grp->bb_free_count >= (1 << (i + 1)))\n            break;\n    } while (--i >= 0);\n\n    grp->bb_largest_free_order = i;\n}''',\n                'inode.c': '''/*\n * ext4 inode routines\n */\n\n#include "ext4.h"\n\nstruct inode *ext4_iget(struct super_block *sb, unsigned long ino)\n{\n    struct ext4_iloc iloc;\n    struct ext4_inode *raw_inode;\n    struct inode *inode;\n    long ret;\n\n    inode = iget_locked(sb, ino);\n    if (!inode)\n        return ERR_PTR(-ENOMEM);\n\n    if (!(inode->i_state & I_NEW))\n        return inode;\n\n    ret = ext4_get_inode_loc(inode, &iloc);\n    if (ret < 0)\n        goto bad_inode;\n\n    return inode;\n}\n\nEXPORT_SYMBOL(ext4_iget);'''\n            },\n            'btrfs': {\n                'ctree.c': '''/*\n * B-tree implementation for btrfs\n */\n\n#include "ctree.h"\n\nstatic int bin_search(const struct btrfs_key *key, const void *p,\n           int hi, int *slot)\n{\n    int lo = 0;\n    int mid;\n    int ret;\n\n    while (lo < hi) {\n        mid = (lo + hi) / 2;\n        ret = comp_keys(key, offset_ptr(p, mid));\n\n        if (ret < 0)\n            hi = mid;\n        else if (ret > 0)\n            lo = mid + 1;\n        else {\n            *slot = mid;\n            return 0;\n        }\n    }\n    *slot = lo;\n    return 1;\n}\n\nEXPORT_SYMBOL(bin_search);'''\n            }\n        },\n        'mm': {\n            'page_alloc.c': '''/*\n * Memory allocator implementation\n */\n\n#include <linux/mm.h>\n#include <linux/gfp.h>\n\nstatic inline void __free_one_page(struct page *page, unsigned long pfn,\n        struct zone *zone, unsigned int order,\n        int migratetype)\n{\n    unsigned long combined_pfn;\n    unsigned long uninitialized_var(buddy_pfn);\n    struct page *buddy;\n\n    while (order < MAX_ORDER - 1) {\n        buddy_pfn = __find_buddy_pfn(pfn, order);\n        buddy = page + (buddy_pfn - pfn);\n\n        if (!page_is_buddy(page, buddy, order))\n            goto done_merging;\n\n        if (page_before_buddy(page, buddy, order)) {\n            combined_pfn = pfn;\n            pfn = buddy_pfn;\n        } else {\n            combined_pfn = buddy_pfn;\n        }\n        pfn = combined_pfn;\n        page = page + (combined_pfn - pfn);\n        order++;\n    }\n}\n\nEXPORT_SYMBOL(__free_one_page);''',\n            'vmscan.c': '''/*\n * Page reclaim and swap management\n */\n\n#include <linux/mm.h>\n#include <linux/swap.h>\n\nstatic unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,\n    struct lruvec *lruvec, struct scan_control *sc)\n{\n    int file = is_file_lru(lru);\n\n    if (lru == LRU_UNEVICTABLE)\n        return shrink_unevictable_list(lruvec, sc);\n\n    if (nr_to_scan == 0)\n        return 0;\n\n    return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);\n}\n\nEXPORT_SYMBOL(shrink_list);'''\n        },\n        'include': {\n            'linux': {\n                'sched.h': '''/*\n * sched.h - Process scheduler header\n */\n\n#ifndef _LINUX_SCHED_H\n#define _LINUX_SCHED_H\n\nstruct task_struct {\n    volatile long state;\n    void *stack;\n    atomic_t usage;\n    unsigned int flags;\n    unsigned int ptrace;\n    \n    int prio, static_prio, normal_prio;\n    unsigned int rt_priority;\n    const struct sched_class *sched_class;\n    struct sched_entity se;\n    struct sched_rt_entity rt;\n    \n    unsigned int policy;\n    cpumask_t cpus_allowed;\n    \n    int nr_cpus_allowed;\n    unsigned long rcu_blocked_node;\n    \n    struct sched_info sched_info;\n    struct list_head tasks;\n};\n\n#endif /* _LINUX_SCHED_H */''',\n                'kernel.h': '''/*\n * kernel.h - Kernel interfaces\n */\n\n#ifndef _LINUX_KERNEL_H\n#define _LINUX_KERNEL_H\n\n#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))\n\n#define LINUX_VERSION_CODE KERNEL_VERSION(6,0,0)\n\n#define KERNEL_VERSION_STR "6.0.12-arch1-1"\n\n#endif /* _LINUX_KERNEL_H */''',\n                'mm.h': '''/*\n * mm.h - Memory management header\n */\n\n#ifndef _LINUX_MM_H\n#define _LINUX_MM_H\n\nstruct page {\n    unsigned long flags;\n    atomic_t _refcount;\n    atomic_t _mapcount;\n    unsigned long private;\n    struct address_space *mapping;\n    pgoff_t index;\n    unsigned long counters;\n    union {\n        struct {\n            unsigned int inuse:16;\n            unsigned int objects:15;\n            unsigned int frozen:1;\n        };\n        unsigned long counters;\n    };\n};\n\n#endif /* _LINUX_MM_H */'''\n            }\n        },\n        'Makefile': '''# Makefile - Linux kernel build system\n# Architecture\nARCH = x86_64\nCROSS_COMPILE =\n\n# Kernel version\nVERSION = 6\nPATCHLEVEL = 0\nSUBLEVEL = 12\nEXTRAVERSION = -arch1-1\n\n# Compiler\nCC = gcc\nCPP = $(CC) -E\nAR = ar\nLD = ld\nOBJCOPY = objcopy\nOBJDUMP = objdump\n\n# Kernel image\nVMBOOT = arch/$(ARCH)/boot/vmlinux\nBZIMAGE = arch/$(ARCH)/boot/bzImage\n\nall: vmlinux\n\nconfig: prepare\n\tvmlinux: $(VMLINUX_OBJS)\n\t$(LD) $(LDFLAGS) -o vmlinux $^\n\nclean:\n\t$(RM) -f *.o vmlinux\n\n.PHONY: all config clean\n''',\n        'README': '''Linux Kernel 6.0.12\n===================\n\nThe Linux kernel is a free and open-source, monolithic, Unix-like operating \nsystem kernel. It is deployed on a wide variety of computing systems, from \nembedded devices and mobile phones to mainframes and supercomputers.\n\nKey Features:\n- Monolithic kernel design\n- Completely Fair Scheduler (CFS)\n- Memory management with page caching\n- Virtual memory system\n- Loadable kernel modules\n- Device drivers for hardware support\n- Filesystem support (ext4, btrfs, XFS, etc.)\n- Networking stack (TCP/IP, IPv4/IPv6)\n- Security frameworks (SELinux, AppArmor)\n\nDirectory Structure:\n\narch/        - Architecture-specific code (x86, ARM, PowerPC, etc.)\ndrivers/     - Device drivers (GPU, network, storage, etc.)\nfs/          - Filesystem implementations\nmm/          - Memory management\ninclude/     - Header files\nKernel/      - Core kernel functionality\nnet/         - Networking stack\n\nFor more information, visit: https://kernel.org\n'''\n    }\n}\n\n# Virtual file system\nVIRTUAL_FS = {\n    '/': {\n        'type': 'directory',\n        'contents': {\n            'home': {'type': 'directory', 'contents': {\n                'user': {'type': 'directory', 'contents': {\n                    'Desktop': {'type': 'directory', 'contents': {}},\n                    'Documents': {'type': 'directory', 'contents': {}},\n                    'README.txt': {'type': 'file', 'content': 'Welcome to Arch Linux Terminal!\\nThis is a browser-based terminal emulator with Linux Kernel source and pacman package manager.'},\n                    'archlinux.txt': {'type': 'file', 'content': 'Arch Linux is a lightweight and flexible Linux distribution.\\nIt follows the KISS principle - Keep It Simple, Stupid.\\n\\nUse pacman to manage packages:\\n  pacman -S package_name      # Install package\\n  pacman -R package_name      # Remove package\\n  pacman -Syu                 # Update all packages\\n  pacman -Ss search_term      # Search packages'}\n                }}\n            }},\n            'etc': {'type': 'directory', 'contents': {\n                'os-release': {'type': 'file', 'content': 'NAME=\"Arch Linux\"\\nID=arch\\nID_LIKE=archlinux\\nPRETTY_NAME=\"Arch Linux\"\\nVERSION=\"rolling\"'},\n                'pacman.conf': {'type': 'file', 'content': '[options]\\nHoldPkg = pacman glibc\\nArchitecture = auto\\nColorOutput = true\\nCheckSpace\\n\\n[core]\\nServer = https://mirrors.kernel.org/archlinux/$repo/os/$arch\\n\\n[extra]\\nServer = https://mirrors.kernel.org/archlinux/$repo/os/$arch'}\n            }},\n            'usr': {'type': 'directory', 'contents': {'bin': {'type': 'directory', 'contents': {}}}},\n            'var': {'type': 'directory', 'contents': {\n                'cache': {'type': 'directory', 'contents': {\n                    'pacman': {'type': 'directory', 'contents': {\n                        'pkg': {'type': 'directory', 'contents': {}}\n                    }}\n                }},\n                'lib': {'type': 'directory', 'contents': {\n                    'pacman': {'type': 'directory', 'contents': {\n                        'local': {'type': 'directory', 'contents': {}}\n                    }}\n                }}\n            }},\n            'src': {'type': 'directory', 'contents': KERNEL_FILES},\n            'bin': {'type': 'directory', 'contents': {}},\n        }\n    }\n}\n\n# Session state for each user\nsessions = {}\n\nclass FileSystem:\n    def __init__(self):\n        self.fs = VIRTUAL_FS\n        self.current_dir = '/home/user'\n        self.installed_packages = {'base', 'bash', 'glibc', 'coreutils'}\n    \n    def get_path_parts(self, path):\n        if path.startswith('/'):\n            path = path[1:]\n        return [p for p in path.split('/') if p]\n    \n    def navigate_to_path(self, path):\n        if path == '/':\n            return self.fs['/']\n        \n        parts = self.get_path_parts(path)\n        current = self.fs['/']\n        \n        for part in parts:\n            if part in current.get('contents', {}):\n                current = current['contents'][part]\n            else:\n                return None\n        \n        return current\n    \n    def resolve_path(self, path):\n        if path.startswith('/'):\n            return path\n        \n        if path == '.':\n            return self.current_dir\n        \n        if path == '..':\n            parts = self.get_path_parts(self.current_dir)\n            if parts:\n                return '/' + '/'.join(parts[:-1])\n            return '/'\n        \n        if self.current_dir == '/':\n            return '/' + path\n        else:\n            return self.current_dir + '/' + path\n    \n    def list_directory(self, path):\n        node = self.navigate_to_path(path)\n        if node is None:\n            return None\n        if node.get('type') != 'directory':\n            return None\n        return node.get('contents', {})\n    \n    def read_file(self, path):\n        node = self.navigate_to_path(path)\n        if node is None:\n            return None\n        if node.get('type') != 'file':\n            return None\n        return node.get('content', '')\n    \n    def create_directory(self, path, name):\n        parent = self.navigate_to_path(path)\n        if parent and parent.get('type') == 'directory':\n            if name not in parent.get('contents', {}):\n                parent['contents'][name] = {'type': 'directory', 'contents': {}}\n                return True\n        return False\n    \n    def create_file(self, path, name):\n        parent = self.navigate_to_path(path)\n        if parent and parent.get('type') == 'directory':\n            if name not in parent.get('contents', {}):\n                parent['contents'][name] = {'type': 'file', 'content': ''}\n                return True\n        return False\n    \n    def delete_item(self, path, name):\n        parent = self.navigate_to_path(path)\n        if parent and parent.get('type') == 'directory':\n            if name in parent.get('contents', {}):\n                del parent['contents'][name]\n                return True\n        return False\n\ndef get_all_packages():\n    \"\"\"Get all available packages from database\"\"\"\n    all_pkgs = {}\n    for repo, packages in PACKAGE_DB.items():\n        all_pkgs.update(packages)\n    return all_pkgs\n\ndef execute_command(session_id, command):\n    \"\"\"Execute a command and return output\"\"\"\n    if session_id not in sessions:\n        sessions[session_id] = {\n            'fs': FileSystem(),\n            'history': []\n        }\n    \n    session = sessions[session_id]\n    fs = session['fs']\n    \n    session['history'].append(command)\n    \n    parts = command.strip().split()\n    if not parts:\n        return ''\n    \n    cmd = parts[0]\n    args = parts[1:]\n    \n    # Arch-specific commands\n    if cmd == 'pacman':\n        if not args:\n            return 'pacman: missing arguments\\nTry: pacman -h for help'\n        \n        flag = args[0] if args else ''\n        \n        if flag == '-S' or flag == '--sync':\n            if len(args) < 2:\n                return 'pacman -S: missing package name'\n            pkg_name = args[1].lower()\n            all_pkgs = get_all_packages()\n            \n            if pkg_name not in all_pkgs:\n                return f\"error: package '{pkg_name}' not found\"\n            \n            if pkg_name in fs.installed_packages:\n                return f\"warning: {pkg_name} is already installed\"\n            \n            pkg_info = all_pkgs[pkg_name]\n            fs.installed_packages.add(pkg_name)\n            return f\"resolving dependencies...\\ninstalling {pkg_name} {pkg_info['version']}...\\n{pkg_name}: installed ({pkg_info['size']})\"\n        \n        elif flag == '-R' or flag == '--remove':\n            if len(args) < 2:\n                return 'pacman -R: missing package name'\n            pkg_name = args[1].lower()\n            \n            if pkg_name == 'base' or pkg_name == 'bash':\n                return f\"error: failed to remove '{pkg_name}' (required base package)\"\n            \n            if pkg_name not in fs.installed_packages:\n                return f\"error: package '{pkg_name}' not found\"\n            \n            fs.installed_packages.discard(pkg_name)\n            return f\"removing {pkg_name}...\\n{pkg_name}: removed\"\n        \n        elif flag == '-Q' or flag == '--query':\n            if len(args) > 1 and args[1].lower() == 'all':\n                sorted_pkgs = sorted(fs.installed_packages)\n                return '\\n'.join([f\"{pkg} {get_all_packages()[pkg]['version']}\" for pkg in sorted_pkgs if pkg in get_all_packages()])\n            elif len(args) > 1:\n                pkg_name = args[1].lower()\n                if pkg_name in fs.installed_packages and pkg_name in get_all_packages():\n                    pkg_info = get_all_packages()[pkg_name]\n                    return f\"{pkg_name} {pkg_info['version']}\"\n                return f\"error: package '{pkg_name}' not found\"\n            else:\n                sorted_pkgs = sorted(fs.installed_packages)\n                return '\\n'.join([f\"{pkg} {get_all_packages()[pkg]['version']}\" for pkg in sorted_pkgs if pkg in get_all_packages()])\n        \n        elif flag == '-Ss' or flag == '--sync' and '--search' in ' '.join(args):\n            if len(args) < 2:\n                return 'pacman -Ss: missing search term'\n            search_term = args[1].lower()\n            all_pkgs = get_all_packages()\n            results = []\n            \n            for repo, packages in PACKAGE_DB.items():\n                for pkg_name, pkg_info in packages.items():\n                    if search_term in pkg_name.lower():\n                        results.append(f\"{repo}/{pkg_name} {pkg_info['version']}\\n    {pkg_name} package\")\n            \n            return '\\n'.join(results) if results else f\"No packages found matching '{search_term}'\"\n        \n        elif flag == '-Syu' or flag == '--sync' and '--refresh' in ' '.join(args):\n            return \":: Synchronizing package databases...\\n:: Starting full system upgrade...\\nthere is nothing to do\\n(already up to date)\"\n        \n        elif flag == '-h' or flag == '--help':\n            return '''pacman 6.0.2 - package manager for Arch Linux\n\nUsage: pacman [options] [targets]\n\nOptions:\n  -S, --sync            Install or upgrade packages\n  -R, --remove          Remove packages\n  -Q, --query           Query the package database\n  -Ss                   Search package database\n  -Syu                  Update all packages\n  -h, --help            Show this help\n\nExamples:\n  pacman -S vim         Install vim\n  pacman -R vim         Remove vim\n  pacman -Q             List installed packages\n  pacman -Ss python     Search for python packages\n  pacman -Syu           Update system'''\n        else:\n            return f\"pacman: unknown option '{flag}'\\nTry: pacman -h\"\n    \n    # Help command\n    elif cmd == 'help':\n        return \"\"\"Available commands:\n  ls              - List directory contents\n  cd <dir>        - Change directory\n  pwd             - Print working directory\n  cat <file>      - Display file contents\n  echo <text>     - Print text\n  mkdir <dir>     - Create directory\n  touch <file>    - Create file\n  rm <name>       - Remove file/directory\n  find <pattern>  - Find files matching pattern\n  grep <text>     - Search in files\n  wc <file>       - Word/line count\n  head <file>     - Show first 10 lines\n  tail <file>     - Show last 10 lines\n  tree            - Show directory tree\n  uname           - System information\n  whoami          - Current user\n  date            - Current date and time\n  pacman          - Arch package manager\n  neofetch        - System info\n  screenfetch     - System info with ASCII art\n  lsb_release     - Distribution info\n  archey          - Arch Linux info display\n  clear           - Clear screen\n  help            - Show this help message\n  exit            - Exit terminal\n\nLinux Kernel Integration:\n  Try: cd /src/linux to explore kernel source!\n  Browse: drivers/, fs/, mm/, arch/, include/\n  Read: cat /src/linux/README\"\"\"\n    \n    # System information commands\n    elif cmd == 'neofetch':\n        return '''  /\\\\\\n /  \\\\ \n/    \\\\\n\\\\    /\n \\\\  / \n  \\\\/\n\nArch Linux\nKernel: 6.0.12-arch1-1\nUptime: 2 days, 5 hours\nPackages: {}  \nShell: bash\nCPU: Intel(R) Core(TM) i7-9700K\nMemory: 12.5 GB / 16 GB\nDisk: 256 GB / 512 GB'''.format(len(sessions[session_id]['fs'].installed_packages))\n    \n    elif cmd == 'screenfetch':\n        return '''         _,met=$$$$$gg.\n      ,g$$$$$$$$$$$$$$$P.\n    ,g$$P\"     \"\"\"Y$$.\".\n   ,$$P\\'              `$$.\n  \\'d$\'     -=_       \\\\$.\n  $$P      d$$$       $$$.\n  $$      d$$$P      $$$$.\n  $$dg_ ,$$$$'     .$$$$$$.\n  `Y$P\\'  $$$$P      $$$$$$.\n   `$\"   \"$$$$\"      Y$$$$$.\n    g dg  \"$$P\"       Y$$$$.\n   $P    \"$$P'        $$$$.\n\nArch Linux\nHostname: arch-linux\nKernel: 6.0.12-arch1-1 x86_64\nUptime: 2 days, 5 hours\nPackages: {}  \nShell: bash 5.1.016\nCPU: Intel i7-9700K\nRAM: 12.5 GB / 16 GB\nDisk: 256 GB / 512 GB'''.format(len(sessions[session_id]['fs'].installed_packages))\n    \n    elif cmd == 'lsb_release':\n        return '''LSB Version: 1.4\nDistributor ID: Arch\nDescription: Arch Linux\nRelease: rolling\nCodename: rolling'''\n    \n    elif cmd == 'archey':\n        return '''               +                \n               #                 \n              ###                \n             #####               \n            #######              \n           #########             \n          ###########            \n         #############           \n        ###############          \n       #################         \n      ###################        \n n  ######Arch Linux######        \n    ########kernel#########      \n   ##########six-point######     \n  ############zero##############\n\nArch Linux | Kernel: 6.0.12-arch1-1\nPackages: {} | Shell: bash\nUptime: 2 days | RAM: 12.5 GB / 16 GB'''.format(len(sessions[session_id]['fs'].installed_packages))\n    \n    elif cmd == 'ls':\n        path = args[0] if args else fs.current_dir\n        path = fs.resolve_path(path)\n        contents = fs.list_directory(path)\n        if contents is None:\n            return f\"ls: cannot access '{path}': No such file or directory\"\n        \n        if '-la' in ' '.join(args):\n            output = \"total 24\\n\"\n            output += f\"drwxr-xr-x 2 user user 4096 Jul 21 10:00 .\\n\"\n            output += f\"drwxr-xr-x 3 user user 4096 Jul 21 10:00 ..\\n\"\n            for name, item in contents.items():\n                if item['type'] == 'directory':\n                    output += f\"drwxr-xr-x 2 user user 4096 Jul 21 10:00 {name}\\n\"\n                else:\n                    content = item.get('content', '')\n                    size = len(content.encode('utf-8'))\n                    output += f\"-rw-r--r-- 1 user user {size:>5} Jul 21 10:00 {name}\\n\"\n            return output.rstrip()\n        else:\n            return '  '.join(sorted(contents.keys())) if contents else ''\n    \n    elif cmd == 'cd':\n        if not args:\n            fs.current_dir = '/home/user'\n            return ''\n        new_dir = fs.resolve_path(args[0])\n        node = fs.navigate_to_path(new_dir)\n        if node is None:\n            return f\"cd: no such file or directory: {args[0]}\"\n        if node.get('type') != 'directory':\n            return f\"cd: not a directory: {args[0]}\"\n        fs.current_dir = new_dir\n        return ''\n    \n    elif cmd == 'pwd':\n        return fs.current_dir\n    \n    elif cmd == 'cat':\n        if not args:\n            return 'cat: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"cat: {args[0]}: No such file or directory\"\n        return content\n    \n    elif cmd == 'echo':\n        return ' '.join(args)\n    \n    elif cmd == 'mkdir':\n        if not args:\n            return 'mkdir: missing operand'\n        if fs.create_directory(fs.current_dir, args[0]):\n            return ''\n        return f\"mkdir: cannot create directory '{args[0]}'\"\n    \n    elif cmd == 'touch':\n        if not args:\n            return 'touch: missing operand'\n        if fs.create_file(fs.current_dir, args[0]):\n            return ''\n        return f\"touch: cannot create file '{args[0]}'\"\n    \n    elif cmd == 'rm':\n        if not args:\n            return 'rm: missing operand'\n        if fs.delete_item(fs.current_dir, args[0]):\n            return ''\n        return f\"rm: cannot remove '{args[0]}': No such file or directory\"\n    \n    elif cmd == 'find':\n        if not args:\n            return 'find: missing pattern'\n        pattern = args[0].lower()\n        results = []\n        \n        def search_dir(path, node):\n            if node.get('type') == 'directory':\n                for name, item in node.get('contents', {}).items():\n                    full_path = path + '/' + name if path else '/' + name\n                    if pattern in name.lower():\n                        results.append(full_path)\n                    search_dir(full_path, item)\n        \n        search_dir('', fs.navigate_to_path(fs.current_dir))\n        return '\\n'.join(results) if results else f'find: no matches for {pattern}'\n    \n    elif cmd == 'grep':\n        if len(args) < 2:\n            return 'grep: missing arguments'\n        pattern = args[0]\n        filepath = fs.resolve_path(args[1])\n        content = fs.read_file(filepath)\n        if content is None:\n            return f\"grep: {args[1]}: No such file or directory\"\n        \n        matches = []\n        for i, line in enumerate(content.split('\\n'), 1):\n            if pattern in line:\n                matches.append(f\"{i}: {line}\")\n        return '\\n'.join(matches) if matches else ''\n    \n    elif cmd == 'head':\n        if not args:\n            return 'head: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"head: {args[0]}: No such file or directory\"\n        lines = content.split('\\n')[:10]\n        return '\\n'.join(lines)\n    \n    elif cmd == 'tail':\n        if not args:\n            return 'tail: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"tail: {args[0]}: No such file or directory\"\n        lines = content.split('\\n')[-10:]\n        return '\\n'.join(lines)\n    \n    elif cmd == 'wc':\n        if not args:\n            return 'wc: missing operand'\n        path = fs.resolve_path(args[0])\n        content = fs.read_file(path)\n        if content is None:\n            return f\"wc: {args[0]}: No such file or directory\"\n        lines = len(content.split('\\n'))\n        words = len(content.split())\n        chars = len(content)\n        return f\" {lines} {words} {chars} {args[0]}\"\n    \n    elif cmd == 'tree':\n        def build_tree(node, prefix='', is_last=True, depth=0, max_depth=3):\n            if depth > max_depth:\n                return ''\n            \n            output = ''\n            if depth == 0:\n                output = fs.current_dir + '\\n'\n            \n            if node.get('type') == 'directory':\n                items = sorted(node.get('contents', {}).items())\n                for i, (name, item) in enumerate(items):\n                    is_last_item = i == len(items) - 1\n                    current_prefix = '└── ' if is_last_item else '├── '\n                    output += prefix + current_prefix + name\n                    \n                    if item['type'] == 'directory':\n                        output += '/'\n                        next_prefix = prefix + ('    ' if is_last_item else '│   ')\n                        output += '\\n' + build_tree(item, next_prefix, is_last_item, depth + 1, max_depth)\n                    else:\n                        output += '\\n'\n            \n            return output\n        \n        node = fs.navigate_to_path(fs.current_dir)\n        return build_tree(node).rstrip()\n    \n    elif cmd == 'uname':\n        if '-a' in args:\n            return 'Linux arch-linux 6.0.12-arch1-1 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux'\n        return 'Linux'\n    \n    elif cmd == 'whoami':\n        return 'user'\n    \n    elif cmd == 'date':\n        return datetime.now().strftime('%a %b %d %H:%M:%S %Z %Y')\n    \n    elif cmd == 'clear':\n        return '__CLEAR__'\n    \n    elif cmd == 'exit':\n        return '__EXIT__'\n    \n    else:\n        return f\"{cmd}: command not found\"\n\n@app.route('/')\ndef index():\n    return render_template('index.html')\n\n@app.route('/api/execute', methods=['POST'])\ndef api_execute():\n    data = request.json\n    session_id = data.get('session_id', 'default')\n    command = data.get('command', '')\n    \n    output = execute_command(session_id, command)\n    \n    session = sessions.get(session_id, {})\n    fs = session.get('fs', FileSystem())\n    \n    return jsonify({\n        'output': output,\n        'cwd': fs.current_dir\n    })\n\nif __name__ == '__main__':\n    app.run(debug=True, host='0.0.0.0', port=5000)
+        'README': 'Linux Kernel 6.0.12 - See /src/linux for kernel source'
+    }
+}
+
+# Virtual file system
+VIRTUAL_FS = {
+    '/': {
+        'type': 'directory',
+        'contents': {
+            'home': {'type': 'directory', 'contents': {
+                'user': {'type': 'directory', 'contents': {
+                    'Desktop': {'type': 'directory', 'contents': {}},
+                    'Documents': {'type': 'directory', 'contents': {}},
+                    'README.txt': {'type': 'file', 'content': 'Welcome to Arch Linux Terminal!\\nRun "startde" to launch the desktop environment.'},
+                }}\
+            }},
+            'etc': {'type': 'directory', 'contents': {
+                'os-release': {'type': 'file', 'content': 'NAME="Arch Linux"\\nID=arch\\nID_LIKE=archlinux\\nPRETTY_NAME="Arch Linux"\\nVERSION="rolling"'},
+            }},
+            'usr': {'type': 'directory', 'contents': {'bin': {'type': 'directory', 'contents': {}}}},
+            'var': {'type': 'directory', 'contents': {
+                'cache': {'type': 'directory', 'contents': {
+                    'pacman': {'type': 'directory', 'contents': {
+                        'pkg': {'type': 'directory', 'contents': {}}\
+                    }}\
+                }},
+            }},
+            'src': {'type': 'directory', 'contents': KERNEL_FILES},
+            'bin': {'type': 'directory', 'contents': {}},
+        }
+    }
+}
+
+# Session state for each user
+sessions = {}
+
+class FileSystem:
+    def __init__(self):
+        self.fs = VIRTUAL_FS
+        self.current_dir = '/home/user'
+        self.installed_packages = {'base', 'bash', 'glibc', 'coreutils', 'gnome', 'gnome-shell'}
+        self.installed_flatpaks = set()
+        self.in_desktop = False
+        self.desktop_windows = {}
+        self.active_window = None
+    
+    def get_path_parts(self, path):
+        if path.startswith('/'):
+            path = path[1:]
+        return [p for p in path.split('/') if p]
+    
+    def navigate_to_path(self, path):
+        if path == '/':
+            return self.fs['/']
+        
+        parts = self.get_path_parts(path)
+        current = self.fs['/']
+        
+        for part in parts:
+            if part in current.get('contents', {}):
+                current = current['contents'][part]
+            else:
+                return None
+        
+        return current
+    
+    def resolve_path(self, path):
+        if path.startswith('/'):
+            return path
+        
+        if path == '.':
+            return self.current_dir
+        
+        if path == '..':
+            parts = self.get_path_parts(self.current_dir)
+            if parts:
+                return '/' + '/'.join(parts[:-1])
+            return '/'
+        
+        if self.current_dir == '/':
+            return '/' + path
+        else:
+            return self.current_dir + '/' + path
+    
+    def list_directory(self, path):
+        node = self.navigate_to_path(path)
+        if node is None:
+            return None
+        if node.get('type') != 'directory':
+            return None
+        return node.get('contents', {})
+    
+    def read_file(self, path):
+        node = self.navigate_to_path(path)
+        if node is None:
+            return None
+        if node.get('type') != 'file':
+            return None
+        return node.get('content', '')
+    
+    def create_directory(self, path, name):
+        parent = self.navigate_to_path(path)
+        if parent and parent.get('type') == 'directory':
+            if name not in parent.get('contents', {}):
+                parent['contents'][name] = {'type': 'directory', 'contents': {}}
+                return True
+        return False
+    
+    def create_file(self, path, name):
+        parent = self.navigate_to_path(path)
+        if parent and parent.get('type') == 'directory':
+            if name not in parent.get('contents', {}):
+                parent['contents'][name] = {'type': 'file', 'content': ''}
+                return True
+        return False
+    
+    def delete_item(self, path, name):
+        parent = self.navigate_to_path(path)
+        if parent and parent.get('type') == 'directory':
+            if name in parent.get('contents', {}):
+                del parent['contents'][name]
+                return True
+        return False
+
+def get_all_packages():
+    """Get all available packages from database"""
+    all_pkgs = {}
+    for repo, packages in PACKAGE_DB.items():
+        all_pkgs.update(packages)
+    return all_pkgs
+
+def render_desktop(fs):
+    """Render ASCII desktop environment"""
+    width, height = 80, 24
+    desktop = []
+    
+    # Top panel
+    desktop.append('┌' + '─' * 78 + '┐')
+    panel = '│ \x1b[44m\x1b[37m GNOME Desktop Environment \x1b[0m' + ' ' * 48 + '🔋 100%  🕐 ' + datetime.now().strftime('%H:%M') + ' │'
+    desktop.append(panel)
+    desktop.append('├' + '─' * 78 + '┤')
+    
+    # Desktop area with taskbar
+    for i in range(height - 6):
+        desktop.append('│' + ' ' * 78 + '│')
+    
+    # Bottom taskbar
+    desktop.append('├' + '─' * 78 + '┤')
+    taskbar = '│\x1b[44m\x1b[37m 🏠 Activities'
+    for app in list(DESKTOP_APPS.values())[:5]:
+        taskbar += f"  {app['icon']} {app['name'][:6]}"
+    taskbar += ' ' * (79 - len(taskbar) + 8) + '│'
+    desktop.append(taskbar)
+    desktop.append('└' + '─' * 78 + '┘')
+    
+    return '\n'.join(desktop)
+
+def render_window(title, content):
+    """Render a desktop window"""
+    width = 60
+    window = []
+    window.append('╔' + '═' * (width - 2) + '╗')
+    window.append(f'║ \x1b[44m\x1b[37m{title:<{width-4}}\x1b[0m │')
+    window.append('╠' + '═' * (width - 2) + '╣')
+    
+    lines = content.split('\n')
+    for line in lines[:10]:
+        truncated = line[:width-4] if len(line) > width-4 else line
+        window.append(f'║ {truncated:<{width-4}} │')
+    
+    window.append('╠' + '═' * (width - 2) + '╣')
+    window.append('║ [Close] [Min] [Max]' + ' ' * (width - 24) + '║')
+    window.append('╚' + '═' * (width - 2) + '╝')
+    
+    return '\n'.join(window)
+
+def execute_command(session_id, command):
+    """Execute a command and return output"""
+    if session_id not in sessions:
+        sessions[session_id] = {
+            'fs': FileSystem(),
+            'history': []
+        }
+    
+    session = sessions[session_id]
+    fs = session['fs']
+    
+    session['history'].append(command)
+    
+    parts = command.strip().split()
+    if not parts:
+        return ''
+    
+    cmd = parts[0]
+    args = parts[1:]
+    
+    # Desktop Environment Commands
+    if cmd == 'startde':
+        if fs.in_desktop:
+            return 'Desktop environment already running'
+        fs.in_desktop = True
+        return '__STARTDE__'
+    
+    elif cmd == 'flatpak':
+        if not args:
+            return 'flatpak: missing arguments'
+        
+        flag = args[0]
+        
+        if flag == 'install':
+            if len(args) < 2:
+                return 'flatpak install: missing package name'
+            pkg = args[1]
+            
+            if pkg not in PACKAGE_DB.get('flathub', {}):
+                return f"error: flatpak '{pkg}' not found in flathub"
+            
+            if pkg in fs.installed_flatpaks:
+                return f"flatpak: {pkg} is already installed"
+            
+            pkg_info = PACKAGE_DB['flathub'][pkg]
+            fs.installed_flatpaks.add(pkg)
+            return f"Downloading {pkg}...\\nInstalling {pkg} {pkg_info['version']}...\\n{pkg}: installed ({pkg_info['size']})"
+        
+        elif flag == 'remove':
+            if len(args) < 2:
+                return 'flatpak remove: missing package name'
+            pkg = args[1]
+            
+            if pkg not in fs.installed_flatpaks:
+                return f"error: flatpak '{pkg}' not installed"
+            
+            fs.installed_flatpaks.discard(pkg)
+            return f"Removing {pkg}...\\n{pkg}: removed"
+        
+        elif flag == 'list' or flag == '--app':
+            if not fs.installed_flatpaks:
+                return 'No flatpak applications installed'
+            return '\\n'.join([f"{app} {PACKAGE_DB['flathub'][app]['version']}" 
+                             for app in sorted(fs.installed_flatpaks) if app in PACKAGE_DB['flathub']])
+        
+        elif flag == 'search':
+            if len(args) < 2:
+                return 'flatpak search: missing search term'
+            search = args[1].lower()
+            results = []
+            for app, info in PACKAGE_DB['flathub'].items():
+                if search in app.lower() or search in info['name'].lower():
+                    results.append(f"{app:30} {info['version']:15} {info['size']}")
+            return '\\n'.join(results) if results else f"No flatpaks found matching '{search}'"
+        
+        elif flag == 'run':
+            if len(args) < 2:
+                return 'flatpak run: missing application id'
+            app = args[1]
+            if app not in fs.installed_flatpaks:
+                return f"error: flatpak '{app}' not installed. Install with: flatpak install {app}"
+            return f"Running {app}...\\nApplication launched in sandbox"
+        
+        elif flag == '-h' or flag == '--help':
+            return '''flatpak 1.14.1 - Application deployment framework
+
+Usage: flatpak [options] command [arguments]
+
+Commands:
+  install <app>      Install application from flathub
+  remove <app>       Remove application
+  run <app>          Run application
+  list               List installed applications
+  search <term>      Search flathub
+  -h, --help         Show this help
+
+Examples:
+  flatpak install org.firefox.firefox
+  flatpak list
+  flatpak run org.firefox.firefox'''
+        
+        else:
+            return f"flatpak: unknown command '{flag}'"
+    
+    # Pacman commands
+    elif cmd == 'pacman':
+        if not args:
+            return 'pacman: missing arguments\\nTry: pacman -h for help'
+        
+        flag = args[0] if args else ''
+        
+        if flag == '-S' or flag == '--sync':
+            if len(args) < 2:
+                return 'pacman -S: missing package name'
+            pkg_name = args[1].lower()
+            all_pkgs = get_all_packages()
+            
+            if pkg_name not in all_pkgs:
+                return f"error: package '{pkg_name}' not found"
+            
+            if pkg_name in fs.installed_packages:
+                return f"warning: {pkg_name} is already installed"
+            
+            pkg_info = all_pkgs[pkg_name]
+            fs.installed_packages.add(pkg_name)
+            return f"resolving dependencies...\\ninstalling {pkg_name} {pkg_info['version']}...\\n{pkg_name}: installed ({pkg_info['size']})"
+        
+        elif flag == '-R' or flag == '--remove':
+            if len(args) < 2:
+                return 'pacman -R: missing package name'
+            pkg_name = args[1].lower()
+            
+            if pkg_name == 'base' or pkg_name == 'bash':
+                return f"error: failed to remove '{pkg_name}' (required base package)"
+            
+            if pkg_name not in fs.installed_packages:
+                return f"error: package '{pkg_name}' not found"
+            
+            fs.installed_packages.discard(pkg_name)
+            return f"removing {pkg_name}...\\n{pkg_name}: removed"
+        
+        elif flag == '-Q' or flag == '--query':
+            if len(args) > 1 and args[1].lower() == 'all':
+                sorted_pkgs = sorted(fs.installed_packages)
+                return '\\n'.join([f"{pkg} {get_all_packages()[pkg]['version']}" for pkg in sorted_pkgs if pkg in get_all_packages()])
+            elif len(args) > 1:
+                pkg_name = args[1].lower()
+                if pkg_name in fs.installed_packages and pkg_name in get_all_packages():
+                    pkg_info = get_all_packages()[pkg_name]
+                    return f"{pkg_name} {pkg_info['version']}"
+                return f"error: package '{pkg_name}' not found"
+            else:
+                sorted_pkgs = sorted(fs.installed_packages)
+                return '\\n'.join([f"{pkg} {get_all_packages()[pkg]['version']}" for pkg in sorted_pkgs if pkg in get_all_packages()])
+        
+        elif flag == '-Ss':
+            if len(args) < 2:
+                return 'pacman -Ss: missing search term'
+            search_term = args[1].lower()
+            all_pkgs = get_all_packages()
+            results = []
+            
+            for repo, packages in PACKAGE_DB.items():
+                for pkg_name, pkg_info in packages.items():
+                    if search_term in pkg_name.lower():
+                        results.append(f"{repo}/{pkg_name} {pkg_info['version']}\\n    {pkg_name} package")
+            
+            return '\\n'.join(results) if results else f"No packages found matching '{search_term}'"
+        
+        elif flag == '-Syu':
+            return ":: Synchronizing package databases...\\n:: Starting full system upgrade...\\nthere is nothing to do\\n(already up to date)"
+        
+        elif flag == '-h' or flag == '--help':
+            return '''pacman 6.0.2 - package manager for Arch Linux
+
+Usage: pacman [options] [targets]
+
+Options:
+  -S, --sync            Install or upgrade packages
+  -R, --remove          Remove packages
+  -Q, --query           Query the package database
+  -Ss                   Search package database
+  -Syu                  Update all packages
+  -h, --help            Show this help
+
+Examples:
+  pacman -S vim         Install vim
+  pacman -R vim         Remove vim
+  pacman -Q             List installed packages
+  pacman -Ss python     Search for python packages
+  pacman -Syu           Update system'''
+        else:
+            return f"pacman: unknown option '{flag}'"
+    
+    # Help command
+    elif cmd == 'help':
+        return """Available commands:
+  ls              - List directory contents
+  cd <dir>        - Change directory
+  pwd             - Print working directory
+  cat <file>      - Display file contents
+  echo <text>     - Print text
+  mkdir <dir>     - Create directory
+  touch <file>    - Create file
+  rm <name>       - Remove file/directory
+  find <pattern>  - Find files matching pattern
+  grep <text>     - Search in files
+  tree            - Show directory tree
+  pacman          - Arch package manager
+  flatpak         - Sandboxed application manager
+  startde         - Start desktop environment (GNOME)
+  neofetch        - System info
+  screenfetch     - System info with ASCII art
+  lsb_release     - Distribution info
+  archey          - Arch Linux info display
+  uname           - System information
+  whoami          - Current user
+  date            - Current date and time
+  clear           - Clear screen
+  help            - Show this help message
+  exit            - Exit terminal"""
+    
+    # System information commands
+    elif cmd == 'neofetch':
+        return f'''  /\\\\
+ /  \\ 
+/    \\
+\\    /
+ \\  / 
+  \\/
+
+Arch Linux
+Kernel: 6.0.12-arch1-1
+Uptime: 2 days, 5 hours
+Packages: {len(fs.installed_packages)}  
+Flatpak Apps: {len(fs.installed_flatpaks)}
+Shell: bash
+CPU: Intel(R) Core(TM) i7-9700K
+Memory: 12.5 GB / 16 GB
+Disk: 256 GB / 512 GB'''
+    
+    elif cmd == 'screenfetch':
+        return f'''         _,met=$$$$$gg.
+      ,g$$$$$$$$$$$$$$$P.
+    ,g$$P"     ""\"\"Y$$.".
+   ,$$P\\'              `$$.
+  \'d$\'     -=_       \\$$.
+  $$P      d$$$       $$$.
+  $$      d$$$P      $$$$.
+  $$dg_ ,$$$$\'     .$$$$$.
+  `Y$P\'  $$$$P      $$$$$.
+   `$"   "$$P\"       Y$$$.
+    g dg  "$$P"       Y$$.
+   $P    "$$P\'        $$$. 
+
+Arch Linux
+Hostname: arch-linux
+Kernel: 6.0.12-arch1-1 x86_64
+Uptime: 2 days, 5 hours
+Packages: {len(fs.installed_packages)}  
+Flatpak: {len(fs.installed_flatpaks)}
+Shell: bash 5.1.016
+CPU: Intel i7-9700K
+RAM: 12.5 GB / 16 GB
+Disk: 256 GB / 512 GB'''
+    
+    elif cmd == 'lsb_release':
+        return '''LSB Version: 1.4
+Distributor ID: Arch
+Description: Arch Linux
+Release: rolling
+Codename: rolling'''
+    
+    elif cmd == 'archey':
+        return f'''               +                
+               #                 
+              ###                
+             #####               
+            #######              
+           #########             
+          ###########            
+         #############           
+        ###############          
+       #################         
+      ###################        
+ n  ######Arch Linux######        
+    ########kernel#########      
+   ##########six-point######     
+  ############zero##############
+
+Arch Linux | Kernel: 6.0.12-arch1-1
+Packages: {len(fs.installed_packages)} | Flatpak: {len(fs.installed_flatpaks)}
+Shell: bash | RAM: 12.5 GB / 16 GB'''
+    
+    elif cmd == 'ls':
+        path = args[0] if args else fs.current_dir
+        path = fs.resolve_path(path)
+        contents = fs.list_directory(path)
+        if contents is None:
+            return f"ls: cannot access '{path}': No such file or directory"
+        
+        if '-la' in ' '.join(args):
+            output = "total 24\\n"
+            output += f"drwxr-xr-x 2 user user 4096 Jul 21 10:00 .\\n"
+            output += f"drwxr-xr-x 3 user user 4096 Jul 21 10:00 ..\\n"
+            for name, item in contents.items():
+                if item['type'] == 'directory':
+                    output += f"drwxr-xr-x 2 user user 4096 Jul 21 10:00 {name}\\n"
+                else:
+                    content = item.get('content', '')
+                    size = len(content.encode('utf-8'))
+                    output += f"-rw-r--r-- 1 user user {size:>5} Jul 21 10:00 {name}\\n"
+            return output.rstrip()
+        else:
+            return '  '.join(sorted(contents.keys())) if contents else ''
+    
+    elif cmd == 'cd':
+        if not args:
+            fs.current_dir = '/home/user'
+            return ''
+        new_dir = fs.resolve_path(args[0])
+        node = fs.navigate_to_path(new_dir)
+        if node is None:
+            return f"cd: no such file or directory: {args[0]}"
+        if node.get('type') != 'directory':
+            return f"cd: not a directory: {args[0]}"
+        fs.current_dir = new_dir
+        return ''
+    
+    elif cmd == 'pwd':
+        return fs.current_dir
+    
+    elif cmd == 'cat':
+        if not args:
+            return 'cat: missing operand'
+        path = fs.resolve_path(args[0])
+        content = fs.read_file(path)
+        if content is None:
+            return f"cat: {args[0]}: No such file or directory"
+        return content
+    
+    elif cmd == 'echo':
+        return ' '.join(args)
+    
+    elif cmd == 'mkdir':
+        if not args:
+            return 'mkdir: missing operand'
+        if fs.create_directory(fs.current_dir, args[0]):
+            return ''
+        return f"mkdir: cannot create directory '{args[0]}'"
+    
+    elif cmd == 'touch':
+        if not args:
+            return 'touch: missing operand'
+        if fs.create_file(fs.current_dir, args[0]):
+            return ''
+        return f"touch: cannot create file '{args[0]}'"
+    
+    elif cmd == 'rm':
+        if not args:
+            return 'rm: missing operand'
+        if fs.delete_item(fs.current_dir, args[0]):
+            return ''
+        return f"rm: cannot remove '{args[0]}': No such file or directory"
+    
+    elif cmd == 'find':
+        if not args:
+            return 'find: missing pattern'
+        pattern = args[0].lower()
+        results = []
+        
+        def search_dir(path, node):
+            if node.get('type') == 'directory':
+                for name, item in node.get('contents', {}).items():
+                    full_path = path + '/' + name if path else '/' + name
+                    if pattern in name.lower():
+                        results.append(full_path)
+                    search_dir(full_path, item)
+        
+        search_dir('', fs.navigate_to_path(fs.current_dir))
+        return '\\n'.join(results) if results else f'find: no matches for {pattern}'
+    
+    elif cmd == 'grep':
+        if len(args) < 2:
+            return 'grep: missing arguments'
+        pattern = args[0]
+        filepath = fs.resolve_path(args[1])
+        content = fs.read_file(filepath)
+        if content is None:
+            return f"grep: {args[1]}: No such file or directory"
+        
+        matches = []
+        for i, line in enumerate(content.split('\\n'), 1):
+            if pattern in line:
+                matches.append(f"{i}: {line}")
+        return '\\n'.join(matches) if matches else ''
+    
+    elif cmd == 'head':
+        if not args:
+            return 'head: missing operand'
+        path = fs.resolve_path(args[0])
+        content = fs.read_file(path)
+        if content is None:
+            return f"head: {args[0]}: No such file or directory"
+        lines = content.split('\\n')[:10]
+        return '\\n'.join(lines)
+    
+    elif cmd == 'tail':
+        if not args:
+            return 'tail: missing operand'
+        path = fs.resolve_path(args[0])
+        content = fs.read_file(path)
+        if content is None:
+            return f"tail: {args[0]}: No such file or directory"
+        lines = content.split('\\n')[-10:]
+        return '\\n'.join(lines)
+    
+    elif cmd == 'tree':
+        def build_tree(node, prefix='', is_last=True, depth=0, max_depth=3):
+            if depth > max_depth:
+                return ''
+            
+            output = ''
+            if depth == 0:
+                output = fs.current_dir + '\\n'
+            
+            if node.get('type') == 'directory':
+                items = sorted(node.get('contents', {}).items())
+                for i, (name, item) in enumerate(items):
+                    is_last_item = i == len(items) - 1
+                    current_prefix = '└── ' if is_last_item else '├── '
+                    output += prefix + current_prefix + name
+                    
+                    if item['type'] == 'directory':
+                        output += '/'
+                        next_prefix = prefix + ('    ' if is_last_item else '│   ')
+                        output += '\\n' + build_tree(item, next_prefix, is_last_item, depth + 1, max_depth)
+                    else:
+                        output += '\\n'
+            
+            return output
+        
+        node = fs.navigate_to_path(fs.current_dir)
+        return build_tree(node).rstrip()
+    
+    elif cmd == 'uname':
+        if '-a' in args:
+            return 'Linux arch-linux 6.0.12-arch1-1 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux'
+        return 'Linux'
+    
+    elif cmd == 'whoami':
+        return 'user'
+    
+    elif cmd == 'date':
+        return datetime.now().strftime('%a %b %d %H:%M:%S %Z %Y')
+    
+    elif cmd == 'clear':
+        return '__CLEAR__'
+    
+    elif cmd == 'exit':
+        return '__EXIT__'
+    
+    else:
+        return f"{cmd}: command not found"
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/api/execute', methods=['POST'])
+def api_execute():
+    data = request.json
+    session_id = data.get('session_id', 'default')
+    command = data.get('command', '')
+    
+    output = execute_command(session_id, command)
+    
+    session = sessions.get(session_id, {})
+    fs = session.get('fs', FileSystem())
+    
+    return jsonify({
+        'output': output,
+        'cwd': fs.current_dir,
+        'in_desktop': fs.in_desktop
+    })
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
